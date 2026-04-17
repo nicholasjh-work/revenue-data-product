@@ -57,15 +57,15 @@ Dataset-level health lives in `revenue.ops.fact_sales_completed_runs`:
 
 | Column | Purpose |
 |---|---|
-| `run_id` | Unique identifier for the pipeline run |
-| `run_timestamp` | UTC timestamp of the run |
-| `row_count` | Curated row count produced by the run |
-| `source_row_count` | Source Completed row count at run time |
-| `drift_pct` | Absolute drift between source and curated |
-| `lag_days` | Freshness lag at run time |
-| `sla_status` | `GREEN` / `AMBER` / `RED` |
-| `checks_passed` | Overall DQ outcome |
-| `failure_message` | Populated when `checks_passed = false` |
+| ![run_id](https://img.shields.io/badge/run__id-1e293b?style=flat-square) | Unique identifier for the pipeline run |
+| ![run_timestamp](https://img.shields.io/badge/run__timestamp-1e293b?style=flat-square) | UTC timestamp of the run |
+| ![row_count](https://img.shields.io/badge/row__count-1e293b?style=flat-square) | Curated row count produced by the run |
+| ![source_row_count](https://img.shields.io/badge/source__row__count-1e293b?style=flat-square) | Source Completed row count at run time |
+| ![drift_pct](https://img.shields.io/badge/drift__pct-1e293b?style=flat-square) | Absolute drift between source and curated |
+| ![lag_days](https://img.shields.io/badge/lag__days-1e293b?style=flat-square) | Freshness lag at run time |
+| ![sla_status](https://img.shields.io/badge/sla__status-1e293b?style=flat-square) | ![GREEN](https://img.shields.io/badge/GREEN-16a34a?style=flat-square) / ![AMBER](https://img.shields.io/badge/AMBER-eab308?style=flat-square) / ![RED](https://img.shields.io/badge/RED-dc2626?style=flat-square) |
+| ![checks_passed](https://img.shields.io/badge/checks__passed-1e293b?style=flat-square) | Overall DQ outcome |
+| ![failure_message](https://img.shields.io/badge/failure__message-1e293b?style=flat-square) | Populated when `checks_passed = false` |
 
 This is the audit trail and the source of the health tile a Power BI semantic model reads.
 
@@ -77,12 +77,12 @@ Every run of the DQ task enforces these checks. Any failure fails the job and bl
 
 | Gate | Check | Severity |
 |---|---|---|
-| Row count sanity | `row_count > 0` on the curated table | Error |
-| Null checks | Zero nulls in `transaction_id`, `transaction_date`, `customer_key`, `product_key`, `net_revenue`, `order_status` | Error |
-| Order status policy | Zero rows where `order_status != 'Completed'` | Error |
-| Grain uniqueness | `transaction_id` unique across the table | Error |
-| Freshness SLA | `max(transaction_date) >= current_date - 2` | Error |
-| Source reconciliation | Row count drift vs Azure SQL source ≤ 1% | Error |
+| ![Completeness](https://img.shields.io/badge/Completeness-dc2626?style=flat-square) | `row_count > 0` on the curated table | ![Error](https://img.shields.io/badge/Error-dc2626?style=flat-square) |
+| ![Completeness](https://img.shields.io/badge/Completeness-dc2626?style=flat-square) | Zero nulls in `transaction_id`, `transaction_date`, `customer_key`, `product_key`, `net_revenue`, `order_status` | ![Error](https://img.shields.io/badge/Error-dc2626?style=flat-square) |
+| ![Policy](https://img.shields.io/badge/Policy-ea580c?style=flat-square) | Zero rows where `order_status != 'Completed'` | ![Error](https://img.shields.io/badge/Error-dc2626?style=flat-square) |
+| ![Grain](https://img.shields.io/badge/Grain-ea580c?style=flat-square) | `transaction_id` unique across the table | ![Error](https://img.shields.io/badge/Error-dc2626?style=flat-square) |
+| ![Freshness](https://img.shields.io/badge/Freshness-2563eb?style=flat-square) | `max(transaction_date) >= current_date - 2` | ![Error](https://img.shields.io/badge/Error-dc2626?style=flat-square) |
+| ![Reconciliation](https://img.shields.io/badge/Reconciliation-2563eb?style=flat-square) | Row count drift vs Azure SQL source ≤ 1% | ![Error](https://img.shields.io/badge/Error-dc2626?style=flat-square) |
 
 Referential integrity is enforced at build time via inner joins on `dim_customer`, `dim_product`, and `dim_date`.
 
@@ -90,11 +90,11 @@ Referential integrity is enforced at build time via inner joins on `dim_customer
 
 ### SLA Status Logic
 
-| Freshness Lag | `sla_status` |
+| Freshness Lag | Status |
 |---|---|
-| ≤ 12 hours | `GREEN` |
-| 12 to 48 hours | `AMBER` |
-| > 48 hours | `RED` |
+| ≤ 12 hours | ![GREEN](https://img.shields.io/badge/GREEN-16a34a?style=flat-square) |
+| 12 to 48 hours | ![AMBER](https://img.shields.io/badge/AMBER-eab308?style=flat-square) |
+| > 48 hours | ![RED](https://img.shields.io/badge/RED-dc2626?style=flat-square) |
 
 `RED` blocks the run. `AMBER` passes with a warning logged to the runs table.
 
@@ -154,14 +154,14 @@ The DQ task wraps `dq.checks.run_checks(spark, jdbc_url, jdbc_props)` so source-
 
 | Component | Technology |
 |---|---|
-| Source | Azure SQL Database |
-| Ingestion | JDBC (MSSQL driver) |
-| Transform + Store | Databricks (PySpark, Unity Catalog, Delta Lake) |
-| Orchestration | Databricks Workflows |
-| Quality | Assertion-based checks run as final job task |
-| Monitoring | `revenue.ops.fact_sales_completed_runs` Delta table |
-| Consumer | Power BI semantic model |
-| Governance | Published data contract + Unity Catalog lineage |
+| ![Source](https://img.shields.io/badge/Source-0078D4?style=flat-square) | Azure SQL Database |
+| ![Ingestion](https://img.shields.io/badge/Ingestion-4b5563?style=flat-square) | JDBC (MSSQL driver) |
+| ![Transform](https://img.shields.io/badge/Transform-FF3621?style=flat-square) | Databricks (PySpark, Unity Catalog, Delta Lake) |
+| ![Orchestration](https://img.shields.io/badge/Orchestration-FF3621?style=flat-square) | Databricks Workflows |
+| ![Quality](https://img.shields.io/badge/Quality-dc2626?style=flat-square) | Assertion-based checks run as final job task |
+| ![Monitoring](https://img.shields.io/badge/Monitoring-00ADD4?style=flat-square) | `revenue.ops.fact_sales_completed_runs` Delta table |
+| ![Consumer](https://img.shields.io/badge/Consumer-F2C811?style=flat-square) | Power BI semantic model |
+| ![Governance](https://img.shields.io/badge/Governance-7c3aed?style=flat-square) | Published data contract + Unity Catalog lineage |
 
 ---
 
