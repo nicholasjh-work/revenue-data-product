@@ -1,30 +1,57 @@
+<div align="center">
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/nh-logo-dark.svg" width="80">
+  <source media="(prefers-color-scheme: light)" srcset="assets/nh-logo-light.svg" width="80">
+  <img alt="NH" src="assets/nh-logo-light.svg" width="80">
+</picture>
+
 # Revenue Data Product
 
-Governed, finance-grade revenue dataset built on the Databricks
-Lakehouse. Productizes the "realized revenue" view of sales so Finance
-and Analytics consume one contracted source instead of reconciling
-divergent filters across dashboards.
+**Governed, finance-grade revenue dataset on the Databricks Lakehouse with a published data contract and blocking DQ gates**
 
-## Architecture
+[![Data Contract](https://img.shields.io/badge/Data_Contract-Published-16a34a?style=for-the-badge)](DATA_CONTRACT.md)
+[![Architecture](https://img.shields.io/badge/Architecture-View-1e40af?style=for-the-badge)](#architecture)
+[![License](https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge)](LICENSE)
+
+![Azure SQL](https://img.shields.io/badge/Azure_SQL-0078D4?style=flat&logo=microsoftsqlserver&logoColor=white)
+![Databricks](https://img.shields.io/badge/Databricks-FF3621?style=flat&logo=databricks&logoColor=white)
+![PySpark](https://img.shields.io/badge/PySpark-E25A1C?style=flat&logo=apachespark&logoColor=white)
+![Delta Lake](https://img.shields.io/badge/Delta_Lake-00ADD4?style=flat)
+![Unity Catalog](https://img.shields.io/badge/Unity_Catalog-FF3621?style=flat)
+![Power BI](https://img.shields.io/badge/Power_BI-F2C811?style=flat&logo=powerbi&logoColor=black)
+
+</div>
+
+---
+
+### What This Does
+
+Productizes the realized-revenue view of sales so Finance and Analytics consume one contracted source instead of reconciling divergent filters across dashboards. Business rules live in the data layer. Data quality signals live on the runs table. Consumers stay thin and governed.
+
+The pipeline: Azure SQL star schema is ingested via JDBC into Databricks. A PySpark transformation applies the Completed-only realized-revenue rule, joins conformed dimensions, and writes a partitioned Delta table at `revenue.silver.fact_sales_completed`. A published data contract defines ownership, SLA, grain, semantics, and exclusion policy. A blocking DQ task enforces null, grain, status, and freshness gates plus source-to-curated reconciliation. Every run logs one row to `revenue.ops.fact_sales_completed_runs` with SLA status, drift, and failure detail. Power BI consumes the silver table and reads the runs table for a health tile.
+
+---
+
+### Architecture
 
 ![Architecture](docs/architecture.png)
 
-The silver job reads Azure SQL via JDBC, applies the Completed-only
-business rule, joins conformed dimensions, and writes a partitioned
-Delta table. The DQ task runs reconciliation and null/grain/SLA checks,
-then logs one row per run to the `fact_sales_completed_runs` operations
-table , which is where dataset-level SLA status lives. Bronze is out of
-scope for v1 to keep the contract surface narrow; a gold aggregate
-layer is a future iteration.
+The silver job reads Azure SQL via JDBC, applies the Completed-only business rule, joins conformed dimensions, and writes a partitioned Delta table. The DQ task runs reconciliation and null/grain/SLA checks, then logs one row per run to the `fact_sales_completed_runs` operations table, which is where dataset-level SLA status lives. Bronze is out of scope for v1 to keep the contract surface narrow; a gold aggregate layer is a future iteration.
 
-### Stack
-- **Source:** Azure SQL Database
-- **Transform & store:** Databricks (PySpark, Unity Catalog, Delta Lake)
-- **Orchestration:** Databricks Workflows
-- **Quality:** assertion-based checks run as the final job task
-- **Governance:** published data contract + Unity Catalog lineage
+---
 
-## Operational visibility
+### Design Principles
+
+1. The data carries its own health signals. Consumers do not need to check external dashboards to know if the data is trustworthy.
+2. Business logic lives at the data layer, not in reports. Reports stay thin, governed, and consistent.
+3. The data product has an owner, an SLA, a consumer list, and a published contract. Anything less is a script.
+4. SLA is a dataset-level property, not a row-level attribute. Run outcomes live in a separate ops table, never on the transaction fact.
+5. Breaking changes require consumer notification, not just a commit.
+
+---
+
+### Operational Visibility
 
 Dataset-level health lives in `revenue.ops.fact_sales_completed_runs`:
 
@@ -40,10 +67,41 @@ Dataset-level health lives in `revenue.ops.fact_sales_completed_runs`:
 | `checks_passed` | Overall DQ outcome |
 | `failure_message` | Populated when `checks_passed = false` |
 
-This is the audit trail and the source of the health tile a Power BI
-semantic model will read.
+This is the audit trail and the source of the health tile a Power BI semantic model reads.
 
-## Repo layout
+---
+
+### Blocking DQ Gates
+
+Every run of the DQ task enforces these checks. Any failure fails the job and blocks downstream consumption.
+
+| Gate | Check | Severity |
+|---|---|---|
+| Row count sanity | `row_count > 0` on the curated table | Error |
+| Null checks | Zero nulls in `transaction_id`, `transaction_date`, `customer_key`, `product_key`, `net_revenue`, `order_status` | Error |
+| Order status policy | Zero rows where `order_status != 'Completed'` | Error |
+| Grain uniqueness | `transaction_id` unique across the table | Error |
+| Freshness SLA | `max(transaction_date) >= current_date - 2` | Error |
+| Source reconciliation | Row count drift vs Azure SQL source ≤ 1% | Error |
+
+Referential integrity is enforced at build time via inner joins on `dim_customer`, `dim_product`, and `dim_date`.
+
+---
+
+### SLA Status Logic
+
+| Freshness Lag | `sla_status` |
+|---|---|
+| ≤ 12 hours | `GREEN` |
+| 12 to 48 hours | `AMBER` |
+| > 48 hours | `RED` |
+
+`RED` blocks the run. `AMBER` passes with a warning logged to the runs table.
+
+---
+
+### Repo Layout
+
 ```
 .
 ├── notebooks/
@@ -60,27 +118,63 @@ semantic model will read.
 ├── docs/
 │   ├── architecture.mmd                     # Mermaid source
 │   └── architecture.png                     # Rendered diagram
+├── assets/
+│   ├── nh-logo-dark.svg
+│   └── nh-logo-light.svg
 ├── DATA_CONTRACT.md                         # Ownership, SLA, schema, exclusions
 ├── CHANGELOG.md                             # Versioned changes
+├── LICENSE                                  # MIT
 └── README.md
 ```
 
-## Running
+---
+
+### Running
+
 The Databricks Workflow has two tasks:
 
 1. `notebooks/silver/fact_sales_completed.py`: extract, transform, write silver
 2. `notebooks/dq/run_checks_task.py`: blocking DQ gates and run log
 
-Both tasks read secrets from the `kv-revenue` scope; do not hardcode
-connection strings. Before the first run, create both tables from
-`sql/ddl/fact_sales_completed.sql` and
-`sql/ddl/fact_sales_completed_runs.sql`.
+Both tasks read secrets from the `kv-revenue` scope. Before the first run, apply both DDLs:
 
-The DQ task wraps `dq.checks.run_checks(spark, jdbc_url, jdbc_props)`
-so source-to-curated reconciliation runs against the same source system
-the silver task reads from. One row is appended to
-`revenue.ops.fact_sales_completed_runs` on every execution, pass or fail.
+```sql
+-- Silver table
+sql/ddl/fact_sales_completed.sql
 
-## Ownership
-Data Product Owner: Nick Hidalgo. See `DATA_CONTRACT.md` for SLA,
-schema, and exclusion policy.
+-- Ops runs table
+sql/ddl/fact_sales_completed_runs.sql
+```
+
+The DQ task wraps `dq.checks.run_checks(spark, jdbc_url, jdbc_props)` so source-to-curated reconciliation runs against the same source system the silver task reads from. One row is appended to `revenue.ops.fact_sales_completed_runs` on every execution, pass or fail.
+
+---
+
+### Tech Stack
+
+| Component | Technology |
+|---|---|
+| Source | Azure SQL Database |
+| Ingestion | JDBC (MSSQL driver) |
+| Transform + Store | Databricks (PySpark, Unity Catalog, Delta Lake) |
+| Orchestration | Databricks Workflows |
+| Quality | Assertion-based checks run as final job task |
+| Monitoring | `revenue.ops.fact_sales_completed_runs` Delta table |
+| Consumer | Power BI semantic model |
+| Governance | Published data contract + Unity Catalog lineage |
+
+---
+
+### Ownership
+
+Data Product Owner: Nicholas Hidalgo. See [`DATA_CONTRACT.md`](DATA_CONTRACT.md) for SLA, schema, semantics, and exclusion policy. See [`CHANGELOG.md`](CHANGELOG.md) for versioned changes.
+
+---
+
+<div align="center">
+
+[![LinkedIn](https://img.shields.io/badge/LinkedIn-Nicholas_Hidalgo-0A66C2?style=for-the-badge&logo=linkedin)](https://linkedin.com/in/nicholashidalgo)&nbsp;
+[![Website](https://img.shields.io/badge/Website-nicholashidalgo.com-000000?style=for-the-badge)](https://nicholashidalgo.com)&nbsp;
+[![Email](https://img.shields.io/badge/Email-analytics@nicholashidalgo.com-EA4335?style=for-the-badge&logo=gmail)](mailto:analytics@nicholashidalgo.com)
+
+</div>
