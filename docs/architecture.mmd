@@ -1,0 +1,46 @@
+%% Architecture diagram for revenue-data-product
+%% Render this at https://mermaid.live and export as docs/architecture.png
+
+flowchart LR
+    subgraph Source["Azure SQL (source star schema)"]
+        FS["dbo.fact_sales"]
+        DC["dbo.dim_customer"]
+        DP["dbo.dim_product"]
+        DD["dbo.dim_date"]
+    end
+
+    subgraph Lakehouse["Databricks Lakehouse"]
+        direction TB
+        S["revenue.silver.fact_sales_completed<br/><i>governed product</i>"]
+        R["revenue.ops.fact_sales_completed_runs<br/><i>run log + SLA</i>"]
+        DQ["dq.checks<br/><i>blocking gates + reconciliation</i>"]
+        CT["DATA_CONTRACT.md<br/><i>ownership / SLA / semantics</i>"]
+    end
+
+    subgraph Consumers["Consumers"]
+        PBI["Power BI<br/>Finance reporting"]
+    end
+
+    FS -->|JDBC| S
+    DC -->|JDBC| S
+    DP -->|JDBC| S
+    DD -->|JDBC| S
+
+    S --> DQ
+    DQ --> R
+    S --> PBI
+    R -.->|health tile| PBI
+
+    CT -.->|governs| S
+
+    classDef source fill:#1e40af,stroke:#1e3a8a,color:#fff
+    classDef curated fill:#16a34a,stroke:#15803d,color:#fff
+    classDef ops fill:#6b7280,stroke:#374151,color:#fff
+    classDef governance fill:#7c3aed,stroke:#5b21b6,color:#fff
+    classDef consumer fill:#eab308,stroke:#ca8a04,color:#000
+
+    class FS,DC,DP,DD source
+    class S curated
+    class R,DQ ops
+    class CT governance
+    class PBI consumer
