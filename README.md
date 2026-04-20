@@ -41,6 +41,24 @@ The silver job reads Azure SQL via JDBC, applies the Completed-only business rul
 
 ---
 
+### Platform Walkthrough
+
+The same flow, shown across the platforms it actually runs on.
+
+**1. Source relational schema.** Azure SQL (`EnterpriseSalesAnalytics`) holds the conformed star schema — `dim_customer`, `dim_date`, `dim_product`, `dim_region`, `dim_sales_rep`, and the `fact_sales` / `fact_quota` / `fact_shipments` transaction tables. This is the system of record; no business rules are applied here.
+
+![Source schema](docs/images/source-schema.png)
+
+**2. Databricks JDBC ingestion and transformation.** Databricks reads the source over JDBC into Spark DataFrames, applies the Completed-only realized-revenue rule, and joins conformed dimensions before writing Delta. Credentials resolve from Unity Catalog secret scopes, never from notebook code.
+
+![Databricks ingestion](docs/images/databricks-ingestion.png)
+
+**3. Curated lakehouse output.** The curated dimension and fact tables land in the lakehouse as the governed contract surface. Power BI and operational reporting read from here — not from raw ingestion — so downstream consumers stay stable as source systems evolve.
+
+![Curated output](docs/images/curated-output.png)
+
+---
+
 ### Design Principles
 
 1. The data carries its own health signals. Consumers do not need to check external dashboards to know if the data is trustworthy.
